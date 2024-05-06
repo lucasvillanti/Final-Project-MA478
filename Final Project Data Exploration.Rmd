@@ -1,0 +1,89 @@
+---
+title: "Data Exploration"
+author: "Lucas Villanti & Garrett Chrisman"
+date: "2024-04-20"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(lubridate)
+```
+
+```{r}
+merged_data <- read.csv("merged_data.csv")
+```
+
+
+```{r}
+# 1. Summarize the data
+summary(merged_data)
+```
+
+```{r}
+# Your data frame (replace this with your actual data frame name)
+your_dataframe_long <- gather(merged_data, key = "month_year", value = "burglary_rate", 
+                              Jan.2010:Jan.2015)
+
+# Convert month_year to an actual date (assuming the first of each month)
+your_dataframe_long$month_year <- as.Date(paste0("01-", your_dataframe_long$month_year), format="%d-%b.%Y")
+
+# Aggregate the data by month
+monthly_burglary <- your_dataframe_long %>%
+  group_by(month_year) %>%
+  summarize(mean_burglary = mean(burglary_rate), .groups = 'drop')
+```
+
+
+```{r}
+# Scatter Plot of Total Crime vs. Population and Unemployment
+ggplot(merged_data, aes(x = pop, y = Total.Crime)) +
+  geom_point(aes(color = unemp), size = 3 ) +
+  theme_minimal() +
+  scale_color_gradientn(colors = c("blue", "green", "yellow", "red")) +
+  labs(title = "Scatter Plot of Total Crime vs. Population",
+       subtitle = "Colored by Unemployment Rate",
+       x = "Population",
+       y = "Total Crime Rate")
+
+```
+
+
+```{r}
+# Generate a cleaner time series plot
+ggplot(monthly_burglary, aes(x = month_year, y = mean_burglary)) +
+  geom_line(size = 1, alpha = 0.5) +  # thinner, semi-transparent lines
+  geom_smooth(se = FALSE, color = "blue", size = 1.5) + # trend line
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), # rotate x labels for readability
+        plot.title = element_text(hjust = 0.5)) + # center the plot title
+  labs(title = "Time Series of Mean Burglary Rates",
+       x = "Month-Year",
+       y = "Mean Burglary Rate") +
+  scale_x_date(date_breaks = "6 months", date_labels = "%b %Y") # adjust date breaks and labels
+```
+
+
+```{r}
+# Histogram of Total Crime
+ggplot(merged_data, aes(x = Total.Crime)) +
+  geom_histogram(binwidth = 5, fill = 'skyblue', color = 'black') +
+  theme_minimal() +
+  labs(title = "Histogram of Total Crime Rates",
+       x = "Total Crime Rate",
+       y = "Frequency")
+```
+
+```{r}
+# Density Plot of Total Crime
+ggplot(merged_data, aes(x = Total.Crime)) +
+  geom_density(fill = 'lightgreen', alpha = 0.7) +
+  theme_minimal() +
+  labs(title = "Density Plot of Total Crime Rates",
+       x = "Total Crime Rate",
+       y = "Density")
+```
+
+
+

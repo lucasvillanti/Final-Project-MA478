@@ -1,0 +1,170 @@
+---
+title: "Modeling"
+author: "Lucas Villanti & Garrett Chrisman"
+date: "2024-04-20"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(lme4)
+library(Matrix)
+library(faraway)
+library(INLA)
+library(geepack)
+
+```
+
+```{r}
+merged_data <- read.csv("merged_data.csv")
+
+your_dataframe_long <- merged_data %>%
+  gather(key = "month_year", value = "crime_rate", Jan.2010:Dec.2015, factor_key=TRUE)
+
+your_dataframe_long2 <- your_dataframe_long %>%
+  mutate(
+    month = substr(month_year, 1, 3),
+    year = as.numeric(substr(month_year, 5, 8)) - 2010,
+    year_factor = factor(year),  
+    month_num = match(substr(month_year, 1, 3), month.abb),  
+    month_factor = factor(month_num, levels = 1:12) 
+  )
+
+your_dataframe_long2$unemp <- scale(your_dataframe_long2$unemp)
+your_dataframe_long2$wealth <- scale(your_dataframe_long2$wealth)
+
+
+```
+
+1. POISSON MODEL
+```{r}
+possion_mod <- glm(crime_rate ~ unemp + ym + wealth + year + month_num,
+                   family = poisson(link = "log"),
+                   data = your_dataframe_long2)
+summary(possion_mod)
+```
+
+2. Mixed Effects Model
+```{r}
+# Fit a mixed effects Poisson regression model
+mixed_poisson_mod <- glmer( crime_rate~ unemp + ym + wealth + month_num + (1 | ID) + (1 | year), 
+                           data = your_dataframe_long2, 
+                           family = poisson())
+
+summary(mixed_poisson_mod)
+```
+
+Adding the month variable for random effects
+```{r}
+```
+
+```{r}
+dataFrame <- your_dataframe_long %>% group_by(ID) %>% summarise(Total.Crime)
+```
+
+Mixed Effects Model w/ Month
+```{r}
+
+```
+
+
+3. Chiraq Model
+```{r}
+your_dataframe_long2$ID_year <- your_dataframe_long2$ID
+your_dataframe_long2$ID_month <- your_dataframe_long2$ID
+
+formula <- crime_rate ~ unemp + wealth + year + #month_num +
+  f(year_factor, model = "rw1") + # Fixed effect for years with RW1
+  f(month_factor, model = "rw1", cyclic = TRUE) + # Fixed effect for mSonths with RW1 and cyclic structure
+  f(ID, model = "iid") # Random effect for ID
+#+ # Random effect for ID
+#  f(ID_year, year_factor, model = "iid") + # Random effect for ID and years
+#  f(ID_month, month_num, model = "iid") # Random effect for ID and months
+
+result <- inla(formula,
+               family = "poisson",
+               data = your_dataframe_long2,
+               control.compute = list(dic = TRUE))
+
+summary(result)
+#error in max number of tires due to 
+```
+
+```{r}
+
+fitted_vals_poisson <- fitted(possion_mod)
+
+
+residuals_poisson <- residuals(possion_mod)
+
+
+plot(fitted_vals_poisson, residuals_poisson, xlab = "Fitted Values", ylab = "Residuals", main = "Poisson Model: Fitted vs Residuals")
+abline(h = 0, col = "red")
+
+
+actual_vals_poisson <- your_dataframe_long2$crime_rate
+
+plot(fitted_vals_poisson, actual_vals_poisson, xlab = "Fitted Values", ylab = "Actual Values", main = "Poisson Model: Fitted vs Actual")
+abline(0, 1, col = "blue")
+```
+
+```{r}
+
+# Fitted values
+fitted_vals_mixed <- fitted(mixed_poisson_mod)
+
+# Residuals
+residuals_mixed <- residuals(mixed_poisson_mod)
+
+# Plot
+plot(fitted_vals_mixed, residuals_mixed, xlab = "Fitted Values", ylab = "Residuals", main = "Mixed Effects Model: Fitted vs Residuals")
+abline(h = 0, col = "red")
+
+# Actual values
+actual_vals_mixed <- your_dataframe_long2$crime_rate
+
+# Plot
+plot(fitted_vals_mixed, actual_vals_mixed, xlab = "Fitted Values", ylab = "Actual Values", main = "Mixed Effects Model: Fitted vs Actual")
+abline(0, 1, col = "blue")
+
+```
+
+```{r}
+
+residuals <- residuals(result)
+
+residuals_df <- data.frame(residuals = residuals,
+                           crime_rate = your_dataframe_long2$crime_rate)
+
+residuals_df
+
+plot(residuals_df$crime_rate, residuals_df$deviance.residuals, 
+     xlab = "Crime Rate", ylab = "Residuals",
+     main = "Residual Plot: Chiraq Model")
+abline(h = 0, lty = 2, col = "red")
+
+
+
+fitted_values <- result$summary.fitted.values$mean
+fitted_actual_df <- data.frame(fitted = fitted_values,
+                               actual = your_dataframe_long2$crime_rate,
+                               residuals = residuals)
+
+plot(fitted_actual_df$actual, fitted_actual_df$fitted,
+     xlab = "Actual Crime Rate", ylab = "Fitted Crime Rate",
+     main = "Fitted vs Actual Values: Chiraq Model",
+     xlim = c(0, max(fitted_actual_df$actual)),
+     ylim = c(0, max(fitted_actual_df$fitted)))
+abline(0, 1, lty = 2, col = "red")
+
+plot( fitted_actual_df$fitted, fitted_actual_df$deviance.residuals ,
+     ylab = "Residuals", xlab = "Fitted Crime Rate",
+     main = "Fitted vs Residual Values: Chiraq Model"#,
+     #xlim = c(0,5)#,
+     #ylim = c(min(fitted_actual_df$residuals), max(fitted_actual_df$residuals))
+)
+abline(0, 0, lty = 2, col = "red")
+
+```
+

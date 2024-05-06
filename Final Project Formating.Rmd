@@ -1,0 +1,209 @@
+---
+title: "Project Proposal Code"
+author: "Lucas Villanti & Garrett Chrisman"
+date: "2024-04-04"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(dplyr)
+```
+
+```{r}
+#CSV Files
+crime <- read.csv("crime.csv")
+ym <- read.csv("ym.csv")
+wealth <- read.csv("wealth.csv")
+unemp <- read.csv("unemp.csv")
+pop <- read.csv("pop.csv")
+```
+
+
+Combine the data
+```{r}
+#change names
+pop_data <- pop %>% 
+  rename(ID = X) %>% 
+  mutate(pop = x) %>%
+  select(-x)
+
+# Applying similar adjustments for the other data frames
+unemp_data <- unemp %>% 
+  rename(ID = X) %>% 
+  mutate(unemp = x) %>%
+  select(-x)
+
+wealth_data <- wealth %>% 
+  rename(ID = X) %>% 
+  mutate(wealth = x) %>%
+  select(-x)
+
+ym_data <- ym %>% 
+  rename(ID = X) %>% 
+  mutate(ym = x) %>%
+  select(-x)
+
+crime_data <- crime %>% 
+  rename(ID = X)
+```
+
+```{r}
+#Feature Engineering: Creating a Total Crime Column
+crime_columns <- grep("count", names(crime_data), value = TRUE)
+crime_data$Total_Crime <- rowSums(crime_data[, crime_columns], na.rm = TRUE)
+```
+
+
+```{r}
+column_names <- c("ID","count.201001", "count.201002", "count.201003", "count.201004", "count.201005",
+                  "count.201006", "count.201007", "count.201008", "count.201009", "count.201010", "count.201011", "count.201012",
+                  "count.201101", "count.201102", "count.201103", "count.201104", "count.201105", "count.201106", "count.201107",
+                  "count.201108", "count.201109", "count.201110", "count.201111", "count.201112", "count.201201", "count.201202",
+                  "count.201203", "count.201204", "count.201205", "count.201206", "count.201207", "count.201208", "count.201209",
+                  "count.201210", "count.201211", "count.201212", "count.201301", "count.201302", "count.201303", "count.201304",
+                  "count.201305", "count.201306", "count.201307", "count.201308", "count.201309", "count.201310", "count.201311",
+                  "count.201312", "count.201401", "count.201402", "count.201403", "count.201404", "count.201405", "count.201406",
+                  "count.201407", "count.201408", "count.201409", "count.201410", "count.201411", "count.201412", "count.201501",
+                  "count.201502", "count.201503", "count.201504", "count.201505", "count.201506", "count.201507", "count.201508",
+                  "count.201509", "count.201510", "count.201511", "count.201512")
+# Function to convert column name to year-month format, but leave other names unchanged
+convert_to_year_month <- function(name) {
+  if (startsWith(name, "count.")) {
+    # Extract the date part (assumes it's always after "count.")
+    date_part <- substring(name, 7)
+    # Convert to Date object assuming the first of the month
+    date <- as.Date(paste0(date_part, "01"), format="%Y%m%d")
+    # Format Date object to "Mon YYYY" format
+    formatted_date <- format(date, "%b %Y")
+    # Return the new name with "count " prefix
+    return(formatted_date)
+  } else {
+    # If not a count column, return the name unchanged
+    return(name)
+  }
+}
+
+# Apply the function to all column names
+new_column_names <- sapply(column_names, convert_to_year_month)
+
+# Then assign these new names to your dataframe columns
+names(crime_data) <- new_column_names
+```
+
+```{r}
+# Define the mapping of months to seasons
+seasons <- list(
+  Winter = c("Dec", "Jan", "Feb"),
+  Spring = c("Mar", "Apr", "May"),
+  Summer = c("Jun", "Jul", "Aug"),
+  Fall = c("Sep", "Oct", "Nov")
+)
+
+# Function to add seasonal counts to the dataframe
+add_seasonal_counts <- function(df) {
+  # Get the years present in the dataframe columns
+  years <- unique(sub(".* ", "", names(df)[grep("Jan", names(df))]))
+  
+  for (year in years) {
+    for (season in names(seasons)) {
+      # Create a new column for the season and year with initial value of 0
+      season_col_name <- paste(season, year)
+      df[[season_col_name]] <- 0
+      
+      # Loop through the months in the season and sum their counts
+      for (month in seasons[[season]]) {
+        # Adjust for the year rollover for "Winter" season
+        month_year <- ifelse(month == "Dec", as.numeric(year) - 1, year)
+        month_col_name <- paste(month, month_year)
+        
+        # Check if the month column exists since "Dec" of previous year might not be present
+        if (month_col_name %in% names(df)) {
+          df[[season_col_name]] <- df[[season_col_name]] + df[[month_col_name]]
+        }
+      }
+    }
+  }
+  
+  return(df)
+}
+
+# Apply the function to your crime_data dataframe
+crime_data <- add_seasonal_counts(crime_data)
+```
+
+
+```{r}
+# Function to add total seasonal counts to the dataframe
+add_total_seasonal_counts <- function(df) {
+  # Define the mapping of months to seasons
+  seasons <- list(
+    Winter = c("Dec", "Jan", "Feb"),
+    Spring = c("Mar", "Apr", "May"),
+    Summer = c("Jun", "Jul", "Aug"),
+    Fall = c("Sep", "Oct", "Nov")
+  )
+  
+  # Initialize columns for total seasonal counts
+  for (season in names(seasons)) {
+    df[[paste("Total", season)]] <- 0
+  }
+  
+  # Get the years present in the dataframe columns
+  years <- unique(sub(".* ", "", names(df)[grep("Jan", names(df))]))
+  
+  for (year in years) {
+    for (season in names(seasons)) {
+      # Calculate the season column name for the specific year
+      season_col_name <- paste(season, year)
+      # Initialize a temporary sum for the season of the current year
+      df[[season_col_name]] <- 0
+      
+      # Loop through the months in the season and sum their counts
+      for (month in seasons[[season]]) {
+        # Adjust for the year rollover for "Winter" season
+        month_year <- ifelse(month == "Dec", as.numeric(year) - 1, year)
+        month_col_name <- paste(month, month_year)
+        
+        # Sum the data if the month column exists (checking for "Dec" of previous year presence)
+        if (month_col_name %in% names(df)) {
+          df[[season_col_name]] <- df[[season_col_name]] + df[[month_col_name]]
+        }
+      }
+      # Add the sum for this specific season and year to the total count for the season
+      df[[paste("Total", season)]] <- df[[paste("Total", season)]] + df[[season_col_name]]
+    }
+  }
+
+  return(df)
+}
+
+# Apply the function to your crime_data dataframe
+crime_data <- add_total_seasonal_counts(crime_data)
+
+```
+
+```{r}
+#Total Crime Column
+crime_data$`Total Crime` <- crime_data$`Total Winter` + crime_data$`Total Spring` + crime_data$`Total Summer` + crime_data$`Total Fall`
+```
+
+
+```{r}
+#combine the data
+crime_data <- crime_data[, !is.na(names(crime_data))]
+
+merged_data <- pop_data %>%
+  full_join(unemp_data, by = "ID") %>%
+  full_join(wealth_data, by = "ID") %>%
+  full_join(ym_data, by = "ID")%>%
+  full_join(crime_data, by = "ID")
+
+```
+
+```{r}
+# Write the dataframe to a CSV file
+write.csv(merged_data, "merged_data.csv", row.names = FALSE)
+```
+
+
